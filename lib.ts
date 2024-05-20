@@ -13,7 +13,7 @@ export const enum BEFASTMetaStage {
   HEADERREQING = 'headerReqing',
   HEADERFEILD = 'headerFeild',
   HEADERREQED = 'headerReqed',
-  RANGEREQING = 'rangeReq',
+  RANGEREQING = 'rangeReqing',
   RANGEREQFEILD = 'rangeFeild',
   RANGEREQED = 'rangereqed',
 
@@ -41,22 +41,26 @@ export class BFASTMeta extends EventTarget {
   /**
    * 数据区块开始位置(bit)
    */
-  get dataBlockStartByte() {
-    return (this.fileHeader?.at(1))
+  get dataBlockStartOffset() {
+    return ((this.fileHeader?.at(1)) ?? 0n)
   }
-
+  get globalDataBlockStartOffset() {
+    return this.dataBlockStartOffset + BigInt(this.offset)
+  }
   /**
    * 数据区块结束位置(bit)
    */
-  get dataBlockEndByte() {
-    return (this.fileHeader?.at(2))
+  get dataBlockEndOffset() {
+    return (this.fileHeader?.at(2) ?? 0n)
   }
-
+  get globalDataBlockEndOffset() {
+    return this.dataBlockEndOffset + BigInt(this.offset)
+  }
   /**
    * 数据区块总数量
    */
   get dataBlockCount() {
-    return (this.fileHeader?.at(3))
+    return (this.fileHeader?.at(3)) ?? 0n
   }
   /**
    * 数据区块索引范围
@@ -102,6 +106,7 @@ export class BFASTMeta extends EventTarget {
     const result = new Uint8Array(endByte - startByte)
     let count = 0
     for await (const u8arr of resp.body) {
+
       for (const iterator of u8arr) {
         result[count++] = iterator
       }
@@ -123,17 +128,18 @@ export class BFASTMeta extends EventTarget {
 
 
 
-    const end = Number(this.dataBlockStartByte)
+    const end = Number(this.dataBlockStartOffset)
     const start = end - Number(this.dataBlockCount) * 16
     this.dispatchEvent(new Event(this.stage = BEFASTMetaStage.RANGEREQING))
-    const rangeResult = await this.reqRange(start, end).catch(e => {
+    const rangeResult = await this.reqRange(start, end).then((r) => { return r }).catch(e => {
       console.error(e);
-      this.dispatchEvent(new Event(this.stage = BEFASTMetaStage.HEADERFEILD))
+      this.dispatchEvent(new Event(this.stage = BEFASTMetaStage.RANGEREQFEILD))
       return void 0
     })
+
     if (!rangeResult) { return }
     this.rangeData = new BigInt64Array(rangeResult!.buffer!, 0, Number(this.dataBlockCount) * 2)
-    this.dispatchEvent(new Event(this.stage = BEFASTMetaStage.HEADERREQED))
+    this.dispatchEvent(new Event(this.stage = BEFASTMetaStage.RANGEREQED))
   }
 }
 export const enum VIMSTAGE {
@@ -155,8 +161,8 @@ export class VIMFileMeta extends BFASTMeta {
   constructor(source: string) {
     super(source)
   }
-  get NameRange() {
-    return new RangeInfo(this.dataBlockStartByte!, this.dataBlockEndByte!)
+  get nameRange() {
+    return new RangeInfo(this.dataBlockStartOffset!, this.dataBlockEndOffset!)
   }
   /**
    * vim文件名称范围
@@ -204,9 +210,9 @@ export class VIMFileMeta extends BFASTMeta {
    * @param rangeInfo 
    * @returns 
    */
-  private async getSubDataBlockByBfast(rangeInfo: RangeInfo) {
+  private getSubDataBlockByBfast(rangeInfo: RangeInfo) {
     const bfast = new BFASTMeta(this.source, Number(rangeInfo.startOffset))
-    await bfast.initMeta()
+
     return bfast
   }
   /**
@@ -221,10 +227,10 @@ export class VIMFileMeta extends BFASTMeta {
   /**
    * 给出指定命名区块数据
    * @param dataBlockName 区块名称
-   * @param format 给出区块名称
+   * @param format 数据格式
    * @returns 
    */
-  getDataBlock(dataBlockName: string, format: 'bfast' | 'u8arr' = 'bfast') {
+  getDataBlock(dataBlockName: string, format: 'bfast' | 'u8arr' = 'u8arr') {
     const rangeInfo = this.dataBlockNameOffsetMap.get(dataBlockName)
     if (!rangeInfo) return Promise.resolve(void 0)
     switch (format) {

@@ -12,24 +12,20 @@ Deno.serve({ port: 8080 }, async (req) => {
 
   const readable = new ReadableStream<Uint8Array>({
     async start(controller) {
-      console.log(range);
-      
+
       const resut = new Uint8Array(byteLength)
+      /**
+       * TODO:
+       * 中文提示:
+       * 如果区间超过文件大小,或者区间大的离谱可以考虑将区块切割为更小的数据块,一次一次的传送回客户端
+       * en tip:
+       * If the interval exceeds the file size, or if the interval is too large, it can be considered to divide the block into smaller data blocks and transmit them back to the client one at a time
+       */
       await file.read(resut)
       controller.enqueue(resut)
       controller.close()
       file.close()
-      /*let count = 0 
-        for await (const iterator of file.readable) {
-        count += iterator.byteLength
-        console.log(iterator.byteLength);
-        
-        controller.enqueue(iterator)
-        if (count >= byteLength) {
-          controller.close()
-          break;
-        }
-      } */
+
     },
 
     cancel() {

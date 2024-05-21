@@ -1,37 +1,29 @@
-import { VIMFileMeta,BFASTMeta, BEFASTMetaStage, VIMSTAGE } from "./lib.ts";
+import { VIMFileMeta, BEFASTMetaStage } from "./lib.ts";
 
 const bfastFile = new VIMFileMeta('http://localhost:8080/assets/spanish.vim')
 bfastFile.addEventListener(BEFASTMetaStage.HEADERREQED, _v => {
-  console.log(bfastFile.dataBlockEndOffset);
-  
-  console.log('查询文件元信息');
+  console.table({
+    数据块位置: {
+      开始位置: bfastFile.dataBlockEndOffset,
+      结束位置: bfastFile.dataBlockEndOffset
+    }
+  })
 })
 bfastFile.addEventListener(BEFASTMetaStage.RANGEREQING, _v => {
   console.log('查询数据区块');
 })
-bfastFile.addEventListener(VIMSTAGE.NAMEDATABLOCKREQING, _v => {
+bfastFile.addEventListener(BEFASTMetaStage.NAMEDATABLOCKREQING, _v => {
   console.log('查询数据区块名称');
 })
 await bfastFile.initMeta()
-console.log(bfastFile.dataBlockNameOffsetMap);
-const headerU8arr = await bfastFile.getDataBlock('header', 'u8arr') as Uint8Array
+console.log('vim文件区块信息', bfastFile.dataBlockNameOffsetMap);
 
-const textDecoder = new TextDecoder()
-const fileMeta = textDecoder.decode(headerU8arr)
-console.log('header区块解码数据:');
 
-console.log(fileMeta.split('\n'));
+const geometryBfast = bfastFile.getGeometry()
 
-const geometryBfast = await bfastFile.getDataBlock('geometry', 'bfast') as BFASTMeta
-geometryBfast.addEventListener(BEFASTMetaStage.RANGEREQING,e=>{
-  console.log('geometryBfast RANGEREQING',geometryBfast.globalDataBlockStartOffset);
-})
-geometryBfast.addEventListener(BEFASTMetaStage.RANGEREQFEILD,e=>{
-  console.log('geometryBfast RANGEREQFEILD',e);
-})
-geometryBfast.addEventListener(BEFASTMetaStage.RANGEREQED,e=>{
-  console.log('geometryBfast RANGEREQED',geometryBfast.rangeData);
-})
 
-await geometryBfast.initMeta()
+await geometryBfast?.initMeta()
+console.log('g3d区块信息: ', geometryBfast?.dataBlockNameOffsetMap);
 
+
+console.log('meta信息\n', await geometryBfast?.getMetaInfo());

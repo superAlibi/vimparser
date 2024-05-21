@@ -16,12 +16,14 @@ export const enum BEFASTMetaStage {
   RANGEREQING = 'rangeReqing',
   RANGEREQFEILD = 'rangeFeild',
   RANGEREQED = 'rangereqed',
-
+  NAMEDATABLOCKREQING = "namedatablockreqing",
+  NAMEDATABLOCKREQFEILD = "namedatablockreqFeild",
+  NAMEDATABLOCKREQED = "namedatablockreqed",
 }
 /**
  * 
  */
-export class BFASTMeta extends EventTarget {
+export abstract class BFASTMeta extends EventTarget {
   /**
    * 当前阶段
    * 用于表示是否初始化,或者请求到什么阶段
@@ -79,6 +81,18 @@ export class BFASTMeta extends EventTarget {
    */
   public rangeData?: BigInt64Array
   /**
+  * bfast 数据块名称位置索引
+  */
+  get dataBlocksNameOffset() {
+    return this.rangeData?.slice(0, 2)
+  }
+
+
+  /**
+   * 数据区块名称和其位置影射
+   */
+  public dataBlockNameOffsetMap: Map<string, RangeInfo> = new Map()
+  /**
    * 
    * @param source vim请求路径
    * @param offset 子区块的偏移量,
@@ -93,17 +107,22 @@ export class BFASTMeta extends EventTarget {
    * @param endByte 
    * @returns 
    */
-  protected async reqRange(startByte: number, endByte: number) {
+  protected async reqRange(startByte: number | bigint, endByte: number | bigint) {
     if (endByte < startByte) { return }
+    const start = Number(startByte),
+      end = Number(endByte)
     const resp = await globalThis.fetch(this.source, {
       headers: {
-        range: [startByte + this.offset, endByte + this.offset].join('-')
+        range: [start + this.offset, end + this.offset].join('-')
       }
     });
     if (!resp.ok || !resp.body) {
       return
     }
-    const result = new Uint8Array(endByte - startByte)
+    /**
+     * todo
+     */
+    const result = new Uint8Array(end - start)
     let count = 0
     for await (const u8arr of resp.body) {
 
@@ -115,85 +134,50 @@ export class BFASTMeta extends EventTarget {
     return result
   }
   async initMeta() {
-
-    this.dispatchEvent(new Event(this.stage = BEFASTMetaStage.HEADERREQING))
-    const result = await this.reqRange(0, 32).catch(e => {
-      console.error(e);
-      this.dispatchEvent(new Event(this.stage = BEFASTMetaStage.HEADERFEILD))
-      return void 0
-    })
-    if (!result) { return }
-    this.fileHeader = new BigInt64Array(result!.buffer, 0, 4)
-    this.dispatchEvent(new Event(this.stage = BEFASTMetaStage.HEADERREQED))
+    if (!this.fileHeader) {
 
 
+      this.dispatchEvent(new Event(this.stage = BEFASTMetaStage.HEADERREQING))
+      const result = await this.reqRange(0, 32).catch(e => {
+        console.error(e);
+        this.dispatchEvent(new Event(this.stage = BEFASTMetaStage.HEADERFEILD))
+        return void 0
+      })
+      if (!result) { return }
+      this.fileHeader = new BigInt64Array(result!.buffer, 0, 4)
+      this.dispatchEvent(new Event(this.stage = BEFASTMetaStage.HEADERREQED))
+    }
 
-    const end = Number(this.dataBlockStartOffset)
-    const start = end - Number(this.dataBlockCount) * 16
-    this.dispatchEvent(new Event(this.stage = BEFASTMetaStage.RANGEREQING))
-    const rangeResult = await this.reqRange(start, end).then((r) => { return r }).catch(e => {
-      console.error(e);
-      this.dispatchEvent(new Event(this.stage = BEFASTMetaStage.RANGEREQFEILD))
-      return void 0
-    })
+    if (!this.rangeData) {
 
-    if (!rangeResult) { return }
-    this.rangeData = new BigInt64Array(rangeResult!.buffer!, 0, Number(this.dataBlockCount) * 2)
-    this.dispatchEvent(new Event(this.stage = BEFASTMetaStage.RANGEREQED))
-  }
-}
-export const enum VIMSTAGE {
+      const end = Number(this.dataBlockStartOffset)
+      const start = end - Number(this.dataBlockCount) * 16
+      this.dispatchEvent(new Event(this.stage = BEFASTMetaStage.RANGEREQING))
+      const rangeResult = await this.reqRange(start, end).then((r) => { return r }).catch(e => {
+        console.error(e);
+        this.dispatchEvent(new Event(this.stage = BEFASTMetaStage.RANGEREQFEILD))
+        return void 0
+      })
 
-  NAMEDATABLOCKREQING = "namedatablockreqing",
-  NAMEDATABLOCKREQFEILD = "namedatablockreqFeild",
-  NAMEDATABLOCKREQED = "namedatablockreqed",
-}
-export class VIMFileMeta extends BFASTMeta {
-
-  /**
-   * 数据区块名称列表
-   */
-  public dataBlocksName?: string[]
-  /**
-   * 数据区块名称和其位置偏移
-   */
-  public dataBlockNameOffsetMap: Map<string, RangeInfo> = new Map()
-  constructor(source: string) {
-    super(source)
-  }
-  get nameRange() {
-    return new RangeInfo(this.dataBlockStartOffset!, this.dataBlockEndOffset!)
-  }
-  /**
-   * vim文件名称范围
-   */
-  get dataBlocksNameOffset() {
-    return this.rangeData?.slice(0, 2)
-  }
-  /**
-   * vim文件其他数据区块范围
-   */
-  get dataBlockRangeOffset() {
-    return this.rangeData?.slice(2)
-  }
-  async initMeta(): Promise<void> {
-    await super.initMeta()
-
+      if (!rangeResult) { return }
+      this.rangeData = new BigInt64Array(rangeResult!.buffer!, 0, Number(this.dataBlockCount) * 2)
+      this.dispatchEvent(new Event(this.stage = BEFASTMetaStage.RANGEREQED))
+    }
     const dataRange = this.rangeData!.slice(2)
     const textDecoder = new TextDecoder()
-    this.dispatchEvent(new Event(this.stage = VIMSTAGE.NAMEDATABLOCKREQING))
+    this.dispatchEvent(new Event(this.stage = BEFASTMetaStage.NAMEDATABLOCKREQING))
     const nameRange = await this.reqRange(
       Number(this.dataBlocksNameOffset?.at(0)),
       Number(this.dataBlocksNameOffset?.at(1)))
       .catch((e) => {
         console.error(e);
-        this.dispatchEvent(new Event(this.stage = VIMSTAGE.NAMEDATABLOCKREQFEILD))
+        this.dispatchEvent(new Event(this.stage = BEFASTMetaStage.NAMEDATABLOCKREQFEILD))
         return void 0
       })
-    this.dispatchEvent(new Event(this.stage = VIMSTAGE.NAMEDATABLOCKREQED))
+    this.dispatchEvent(new Event(this.stage = BEFASTMetaStage.NAMEDATABLOCKREQED))
 
 
-    const rangeName = this.dataBlocksName = textDecoder.decode(nameRange).split('\0').filter(Boolean)
+    const rangeName = textDecoder.decode(nameRange).split('\0').filter(Boolean)
 
 
     for (let index = 0, length = dataRange.length / 2; index < length; index++) {
@@ -203,43 +187,104 @@ export class VIMFileMeta extends BFASTMeta {
       this.dataBlockNameOffsetMap.set(rangeName.at(index)!, new RangeInfo(start!, end!))
 
     }
+  }
+}
+
+export class VIMFileMeta extends BFASTMeta {
+  public textDecoder = new TextDecoder()
+
+  constructor(source: string) {
+    super(source)
+  }
+  get nameRange() {
+    return new RangeInfo(this.dataBlockStartOffset!, this.dataBlockEndOffset!)
+  }
+
+  /**
+   * vim文件其他数据区块范围
+   */
+  get dataBlockRangeOffset() {
+    return this.rangeData?.slice(2)
+  }
+  async initMeta(): Promise<void> {
+    await super.initMeta()
+
+
 
   }
-  /**
-   * 给出子区块的bfast格式
-   * @param rangeInfo 
-   * @returns 
-   */
-  private getSubDataBlockByBfast(rangeInfo: RangeInfo) {
-    const bfast = new BFASTMeta(this.source, Number(rangeInfo.startOffset))
 
-    return bfast
-  }
-  /**
-   * 给出子区块的arrayBuffer格式
-   * @param rangeInfo 
-   * @returns 
-   */
-  private async getSubDataBlockByArrayBuffer(rangeInfo: RangeInfo) {
-    const readResult = await this.reqRange(Number(rangeInfo.startOffset), Number(rangeInfo.endOffset))
-    return readResult
-  }
+
   /**
    * 给出指定命名区块数据
    * @param dataBlockName 区块名称
    * @param format 数据格式
    * @returns 
    */
-  getDataBlock(dataBlockName: string, format: 'bfast' | 'u8arr' = 'u8arr') {
+  async getDataBlock(dataBlockName: string, format: 'string' | 'u8arr' = 'u8arr') {
     const rangeInfo = this.dataBlockNameOffsetMap.get(dataBlockName)
     if (!rangeInfo) return Promise.resolve(void 0)
-    switch (format) {
-      case 'bfast':
-        return this.getSubDataBlockByBfast(rangeInfo)
-      case 'u8arr':
-        return this.getSubDataBlockByArrayBuffer(rangeInfo)
-      default:
-        this.getSubDataBlockByBfast(rangeInfo)
-    }
+
+    const u8arr = await this.reqRange(Number(rangeInfo.startOffset), Number(rangeInfo.endOffset))
+    if (format === 'u8arr') return u8arr
+    if (!u8arr) return void 0
+    return this.textDecoder.decode(u8arr)
   }
+  getGeometry() {
+    const rangeInfo = this.dataBlockNameOffsetMap.get('geometry')
+    if (!rangeInfo) return void 0
+    return new GeometryWithG3D(this.source, Number(rangeInfo.startOffset))
+  }
+  getHeader(format: 'u8arr' | 'string') {
+    return this.getDataBlock('header', format)
+  }
+  async getStrings(format: 'u8arr' | 'string') {
+    const rangeInfo = this.dataBlockNameOffsetMap.get('strings')
+    if (!rangeInfo) return void 0
+    const u8arr = await this.reqRange((rangeInfo.startOffset), rangeInfo.endOffset)
+    if (format === 'u8arr') {
+      return u8arr
+    }
+    return this.textDecoder.decode(u8arr)
+  }
+}
+
+
+/**
+ * vim 文件中存在的子区块:geometry区块
+ */
+export class GeometryWithG3D extends BFASTMeta {
+  constructor(souce: string, offset: number) {
+    super(souce, offset)
+  }
+  #meta?: Uint8Array
+  async getMetaInfo() {
+    if (this.#meta) return this.#meta
+    const metaRange = this.dataBlockNameOffsetMap.get('meta')
+    
+    const metau8arr = this.#meta = await this.reqRange(metaRange?.startOffset ?? 0n, metaRange?.endOffset ?? 0n)
+      .catch(e => {
+        console.error(e);
+        return void 0
+      })
+    if (!metau8arr) {
+
+      return
+    }
+    return this.#meta = metau8arr
+  }
+  async initMeta(): Promise<void> {
+    await super.initMeta()
+  }
+
+}
+
+export class AssetWithBFAST extends BFASTMeta {
+  constructor(souce: string, offset: number) {
+    super(souce, offset)
+  }
+  async initMeta(): Promise<void> {
+    await super.initMeta()
+
+  }
+
 }

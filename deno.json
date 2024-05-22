@@ -1,7 +1,10 @@
 {
+  "name": "@advanced/vimparser",
+  "version": "0.1.0",
+  "exports": "./lib.ts",
   "tasks": {
     "dev": "deno run --allow-read --watch main.ts",
-    "serve": "deno run --allow-read --allow-net --watch serve.ts",
-    "req": "deno run --allow-read --allow-net req.ts"
+    "test": "deno run --allow-read --allow-net --watch main_test.ts",
+    "serve": "deno run --allow-read --allow-net --watch serve.ts"
   }
 }

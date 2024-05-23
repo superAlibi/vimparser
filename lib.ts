@@ -2,10 +2,10 @@ export class RangeInfo {
   constructor(
     public startOffset: bigint,
     public endOffset: bigint,
-    public offsetStart: number | bigint = 0,
+    public baseOffset: number | bigint = 0,
   ) {}
 
-  get length() {
+  public get length(): bigint {
     return this.endOffset - this.startOffset;
   }
 }
@@ -72,10 +72,10 @@ export abstract class BFASTMeta extends EventTarget {
   /**
    * 数据区块开始位置(bit)
    */
-  get dataBlockStartOffset() {
+  get dataBlockStartOffset(): bigint {
     return ((this.fileHeader?.at(1)) ?? 0n);
   }
-  get globalDataBlockStartOffset() {
+  get globalDataBlockStartOffset(): bigint {
     return this.dataBlockStartOffset + BigInt(this.offset);
   }
   /**
@@ -209,7 +209,7 @@ export abstract class BFASTMeta extends EventTarget {
 }
 type VimDataBlockFormat = "u8arr" | "string";
 export class VIMFileMeta extends BFASTMeta {
-  public textDecoder = new TextDecoder();
+  public textDecoder: TextDecoder = new TextDecoder();
 
   constructor(source: string) {
     super(source);
@@ -262,7 +262,7 @@ export class VIMFileMeta extends BFASTMeta {
    * @param format
    * @returns
    */
-  getStrings(format: VimDataBlockFormat) {
+  getStrings(format: VimDataBlockFormat):Promise<string | Uint8Array | undefined> {
     return this.getDataBlock("strings", format);
   }
 }
@@ -276,10 +276,11 @@ class VIMGeometryMeta extends BFASTMeta {
   }
   #meta?: Uint8Array;
 
-  async getMetaInfo() {
+  async getMetaInfo(): Promise<Uint8Array|undefined> {
     if (this.#meta) return this.#meta;
-    const metaRange = this.dataBlockNameOffsetMap.get("meta");
 
+
+    const metaRange = this.dataBlockNameOffsetMap.get("meta");
     const metau8arr = this.#meta = await this.reqRange(
       metaRange?.startOffset ?? 0n,
       metaRange?.endOffset ?? 0n,
@@ -373,12 +374,14 @@ class GeometryAttributeMeta {
         this.source,
         this.rangeInfo.startOffset,
         this.rangeInfo.endOffset,
-        this.rangeInfo.startOffset,
+        this.rangeInfo.baseOffset,
       );
     }
     const u8arr = this.#u8arr;
     if (!u8arr) {
-      console.error('异常数据：在元信息中存在数据区间，但实际请求却无法拿到数据');
+      console.error(
+        "异常数据：在元信息中存在数据区间，但实际请求却无法拿到数据",
+      );
       return;
     }
 
@@ -406,9 +409,16 @@ class GeometryAttributeMeta {
     }
   }
 }
-
+type GeoMetaEntrie = {
+  association: AssociationType;
+  semantic: SemanticType;
+  index: string;
+  dataType: TargetArrayType;
+  dataArity: string;
+  rangeinfo: RangeInfo;
+};
 export class VIMGeometry extends VIMGeometryMeta {
-  get geoMetaEntries() {
+  get geoMetaEntries(): GeoMetaEntrie[] {
     return Array.from(this.dataBlockNameOffsetMap.entries()).filter(([k]) =>
       k !== "meta"
     ).map(
@@ -438,7 +448,9 @@ export class VIMGeometry extends VIMGeometryMeta {
    * @param associationType
    * @returns
    */
-  getAssociation(associationType: AssociationType) {
+  public getAssociation(
+    associationType: AssociationType,
+  ): Partial<Record<SemanticType, GeometryAttributeMeta>> {
     const result = this.geoMetaEntries.filter((i) =>
       i.association === associationType
     );
@@ -468,11 +480,8 @@ export class VIMGeometry extends VIMGeometryMeta {
   }
 }
 
-export class AssetWithBFAST extends BFASTMeta {
+export class VIMGeometryAssetsMeta extends BFASTMeta {
   constructor(souce: string, offset: number) {
     super(souce, offset);
-  }
-  async initMeta(): Promise<void> {
-    await super.initMeta();
   }
 }

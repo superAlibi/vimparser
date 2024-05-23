@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "exports": "./lib.ts",
   "tasks": {
-    "dev": "deno run --allow-read --watch main.ts",
+    "dev": "deno run --allow-read  main.ts",
     "test": "deno run --allow-read --allow-net --watch main_test.ts",
     "serve": "deno run --allow-read --allow-net --watch serve.ts"
   }
